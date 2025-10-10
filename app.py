@@ -129,14 +129,9 @@ def image_to_3d(
             mode=multiimage_algo,
         )
     
-    video = render_utils.render_video(outputs['gaussian'][0], num_frames=120)['color']
-    video_geo = render_utils.render_video(outputs['mesh'][0], num_frames=120)['normal']
-    video = [np.concatenate([video[i], video_geo[i]], axis=1) for i in range(len(video))]
-    video_path = os.path.join(user_dir, 'sample.mp4')
-    imageio.mimsave(video_path, video, fps=15)
     state = pack_state(outputs['gaussian'][0], outputs['mesh'][0])
     torch.cuda.empty_cache()
-    return state, video_path
+    return state
 
 
 def extract_glb(
@@ -257,7 +252,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
             slat_sampling_steps,
             multiimage_algo,
         ],
-        outputs=[output_buf, gr.State()],
+        outputs=[output_buf],
     ).then(
         lambda: tuple([gr.Button.update(interactive=True), gr.Button.update(interactive=True)]),
     outputs=[extract_glb_btn, extract_gs_btn],
