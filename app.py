@@ -115,6 +115,7 @@ def image_to_3d(
     req: gr.Request,
 ) -> Tuple[dict, str]:
     user_dir = os.path.join(TMP_DIR, str(req.session_hash))
+    os.makedirs(user_dir, exist_ok=True)
     
     if not is_multiimage:
         outputs = pipeline.run(
@@ -148,9 +149,20 @@ def image_to_3d(
             mode=multiimage_algo,
         )
     state = pack_state(outputs['gaussian'][0], outputs['mesh'][0])
-    torch.cuda.empty_cache()
-    return state
 
+ # ✅ Export automatique du GLB pour affichage direct
+    glb_path = os.path.join(user_dir, 'preview.glb')
+    glb = postprocessing_utils.to_glb(
+        outputs['gaussian'][0],
+        outputs['mesh'][0],
+        simplify=0.96,
+        texture_size=512,
+        verbose=False
+    )
+    glb.export(glb_path)
+
+    torch.cuda.empty_cache()
+    return state, glb_path
 
 def extract_glb(
     state: dict,
@@ -288,7 +300,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
             slat_sampling_steps,
             multiimage_algo,
         ],
-        outputs=[output_buf],
+        outputs=[output_buf, model_output],
     ).then(
         lambda: tuple([gr.Button.update(interactive=True), gr.Button.update(interactive=True)]),
     outputs=[extract_glb_btn, extract_gs_btn],
