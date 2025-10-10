@@ -276,7 +276,8 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
         outputs=[gr.File(), gr.File()],
     )
     
-    demo.load(start_session)
-    demo.unload(end_session)
-
-demo.queue().launch(debug=True)
+# Launch the Gradio app
+if __name__ == "__main__":
+    pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+    pipeline.cuda()
+    demo.launch()
