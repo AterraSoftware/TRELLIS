@@ -237,28 +237,42 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
     
     output_buf = gr.State()
     
+    # Ajouter un composant pour le booléen
+    is_multiimage = gr.Checkbox(label="Use multiple images?", value=False)
+
     generate_btn.click(
         get_seed,
         inputs=[randomize_seed, seed],
         outputs=[seed],
     ).then(
         image_to_3d,
-        inputs=[image_prompt, multiimage_prompt, False, seed, ss_guidance_strength, ss_sampling_steps, slat_guidance_strength, slat_sampling_steps, multiimage_algo, gr.Request()],
+        inputs=[
+            image_prompt,           # Image du single input
+            multiimage_prompt,      # Gallery du multi input
+            is_multiimage,          # Booléen via composant Checkbox
+            seed,
+            ss_guidance_strength,
+            ss_sampling_steps,
+            slat_guidance_strength,
+            slat_sampling_steps,
+            multiimage_algo,
+        ],
         outputs=[output_buf, gr.State()],
     ).then(
         lambda: tuple([gr.Button.update(interactive=True), gr.Button.update(interactive=True)]),
-        outputs=[extract_glb_btn, extract_gs_btn],
+    outputs=[extract_glb_btn, extract_gs_btn],
     )
+
     
     extract_glb_btn.click(
         extract_glb,
-        inputs=[output_buf, mesh_simplify, texture_size, gr.Request()],
+        inputs=[output_buf, mesh_simplify, texture_size],
         outputs=[gr.File(), gr.File()],
     )
     
     extract_gs_btn.click(
         extract_gaussian,
-        inputs=[output_buf, gr.Request()],
+        inputs=[output_buf],
         outputs=[gr.File(), gr.File()],
     )
     
