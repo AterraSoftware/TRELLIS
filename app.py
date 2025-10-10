@@ -227,13 +227,20 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
                 extract_glb_btn = gr.Button("Extract GLB", interactive=False)
                 extract_gs_btn = gr.Button("Extract Gaussian", interactive=False)
             gr.Markdown("""
-                After generation, click the extract button to download the GLB or Gaussian file.
-            """)
+                        After generation, click the extract button to download the GLB or Gaussian file.
+                        """)
+
+        with gr.Column():
+            model_output = LitModel3D(label="Extracted GLB/Gaussian", exposure=10.0, height=300)
+            
+            with gr.Row():
+                download_glb = gr.DownloadButton(label="Download GLB", interactive=False)
+                download_gs = gr.DownloadButton(label="Download Gaussian", interactive=False)
     
-    output_buf = gr.State()
     
     # Ajouter un composant pour le booléen
     is_multiimage = gr.Checkbox(label="Use multiple images?", value=False)
+    output_buf = gr.State()
 
     generate_btn.click(
         get_seed,
