@@ -276,7 +276,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
         outputs=[gr.File(), gr.File()],
     )
     
-    demo.load(start_session, inputs=[], outputs=[])
-    demo.unload(end_session, inputs=[], outputs=[])
+    demo.load(start_session)
+    demo.unload(end_session)
 
 demo.queue().launch(debug=True)
