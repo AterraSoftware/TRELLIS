@@ -30,11 +30,30 @@ def end_session(req: gr.Request):
 
 
 def preprocess_image(image: Image.Image) -> Image.Image:
+    """
+    Preprocess the input image.
+
+    Args:
+        image (Image.Image): The input image.
+
+    Returns:
+        Image.Image: The preprocessed image.
+    """
     processed_image = pipeline.preprocess_image(image)
     return processed_image
 
 
-def preprocess_images(images: List[Image.Image]) -> List[Image.Image]:
+def preprocess_images(images: List[Tuple[Image.Image, str]]) -> List[Image.Image]:
+    """
+    Preprocess a list of input images.
+    
+    Args:
+        images (List[Tuple[Image.Image, str]]): The input images.
+        
+    Returns:
+        List[Image.Image]: The preprocessed images.
+    """
+    images = [image[0] for image in images]
     processed_images = [pipeline.preprocess_image(image) for image in images]
     return processed_images
 
@@ -128,7 +147,6 @@ def image_to_3d(
             },
             mode=multiimage_algo,
         )
-    
     state = pack_state(outputs['gaussian'][0], outputs['mesh'][0])
     torch.cuda.empty_cache()
     return state
@@ -242,6 +260,17 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
     is_multiimage = gr.Checkbox(label="Use multiple images?", value=False)
     output_buf = gr.State()
 
+    image_prompt.upload(
+        preprocess_image,
+        inputs=[image_prompt],
+        outputs=[image_prompt],
+    )
+    multiimage_prompt.upload(
+        preprocess_images,
+        inputs=[multiimage_prompt],
+        outputs=[multiimage_prompt],
+    )
+
     generate_btn.click(
         get_seed,
         inputs=[randomize_seed, seed],
@@ -276,6 +305,11 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
         extract_gaussian,
         inputs=[output_buf],
         outputs=[gr.File(), gr.File()],
+    )
+
+    model_output.clear(
+        lambda: gr.Button(interactive=False),
+        outputs=[download_glb],
     )
     
 # Launch the Gradio app
