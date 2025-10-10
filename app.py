@@ -298,13 +298,19 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
     extract_glb_btn.click(
         extract_glb,
         inputs=[output_buf, mesh_simplify, texture_size],
-        outputs=[gr.File(), gr.File()],
+        outputs=[model_output, download_glb],
+    ).then(
+        lambda: gr.Button(interactive=True),
+        outputs=[download_glb],
     )
     
     extract_gs_btn.click(
         extract_gaussian,
         inputs=[output_buf],
-        outputs=[gr.File(), gr.File()],
+        outputs=[model_output, download_gs],
+    ).then(
+        lambda: gr.Button(interactive=True),
+        outputs=[download_gs],
     )
 
     model_output.clear(
