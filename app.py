@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-from typing import List, Tuple, Literal
+from typing import Tuple
 from PIL import Image
 from easydict import EasyDict as edict
 from fastapi import FastAPI, UploadFile, File
@@ -17,7 +17,13 @@ pipeline = TrellisImageTo3DPipeline.from_pretrained("trellis-image-to-3d")
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
-os.makedirs(TMP_DIR, exist_ok=True)
+
+# --- FastAPI app ---
+app = FastAPI()
+
+@app.on_event("startup")
+def create_tmp_dir():
+    os.makedirs(TMP_DIR, exist_ok=True)
 
 # --- Fonctions ---
 def preprocess_image(image: Image.Image) -> Image.Image:
@@ -72,20 +78,21 @@ def image_to_3d(
     user_dir = TMP_DIR
     os.makedirs(user_dir, exist_ok=True)
 
-    outputs = pipeline.run(
-        image,
-        seed=seed,
-        formats=["gaussian", "mesh"],
-        preprocess_image=False,
-        sparse_structure_sampler_params={
-            "steps": ss_sampling_steps,
-            "cfg_strength": ss_guidance_strength,
-        },
-        slat_sampler_params={
-            "steps": slat_sampling_steps,
-            "cfg_strength": slat_guidance_strength,
-        },
-    )
+    with torch.no_grad():
+        outputs = pipeline.run(
+            image,
+            seed=seed,
+            formats=["gaussian", "mesh"],
+            preprocess_image=False,
+            sparse_structure_sampler_params={
+                "steps": ss_sampling_steps,
+                "cfg_strength": ss_guidance_strength,
+            },
+            slat_sampler_params={
+                "steps": slat_sampling_steps,
+                "cfg_strength": slat_guidance_strength,
+            },
+        )
 
     glb_path = os.path.join(user_dir, 'output.glb')
     glb = postprocessing_utils.to_glb(
@@ -98,9 +105,6 @@ def image_to_3d(
     glb.export(glb_path)
     torch.cuda.empty_cache()
     return glb_path
-
-# --- FastAPI ---
-app = FastAPI()
 
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
