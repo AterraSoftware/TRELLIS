@@ -13,7 +13,7 @@ from trellis.utils import postprocessing_utils
 
 # --- Pipeline init ---
 pipeline = TrellisImageTo3DPipeline.from_pretrained(
-    "microsoft/TRELLIS-image-large",
+    "trellis-image-to-3d",
     use_auth_token=os.getenv("HUGGING_FACE_HUB_TOKEN")
 )
 
