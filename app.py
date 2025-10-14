@@ -16,15 +16,15 @@ MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
 # --- Pipeline global ---
-pipeline = None  # chargé plus tard via preload_model()
+_pipeline = None  # chargé plus tard via preload_model()
 
 
-def preload_model():
-    """Charge le modèle TRELLIS sur le bon device (GPU si dispo)."""
-    global pipeline
-    if pipeline is not None:
+def preload_model() -> TrellisImageTo3DPipeline:
+    """Charge le modèle TRELLIS sur le bon device (GPU si dispo) et retourne le pipeline."""
+    global _pipeline
+    if _pipeline is not None:
         print("✅ Modèle déjà chargé, skip preload.")
-        return
+        return _pipeline
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device}")
@@ -41,7 +41,9 @@ def preload_model():
     else:
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
+    _pipeline = pipeline
     print(f"✅ Modèle chargé sur {device.upper()}")
+    return _pipeline
 
 # --- FastAPI app ---
 app = FastAPI()
@@ -58,8 +60,7 @@ def on_startup():
 
 # --- Fonctions ---
 def preprocess_image(image: Image.Image) -> Image.Image:
-    if pipeline is None:
-        preload_model()
+    pipeline = preload_model()
     return pipeline.preprocess_image(image)
 
 
@@ -104,6 +105,7 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 
 
 def image_to_3d(
+    pipeline: TrellisImageTo3DPipeline,
     image: Image.Image,
     seed: int = 42,
     ss_guidance_strength: float = 1.0,
@@ -111,10 +113,7 @@ def image_to_3d(
     slat_guidance_strength: float = 1.0,
     slat_sampling_steps: int = 20,
 ) -> str:
-    global pipeline
-    if pipeline is None:
-        print("⚙️ Pipeline non chargé, exécution de preload_model()…")
-        preload_model()
+    """Génère un fichier GLB à partir d'une image en utilisant le pipeline fourni."""
 
     user_dir = TMP_DIR
     os.makedirs(user_dir, exist_ok=True)
@@ -147,9 +146,9 @@ def image_to_3d(
     torch.cuda.empty_cache()
     return glb_path
 
-
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
     image = Image.open(file.file).convert("RGBA")
-    glb_path = image_to_3d(image)
+    pipeline = preload_model()
+    glb_path = image_to_3d(pipeline, image)
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
