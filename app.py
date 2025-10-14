@@ -15,10 +15,19 @@ from trellis.utils import postprocessing_utils
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"🔹 Initialisation du pipeline sur le device: {device}")
 
-# ✅ Correction ici : forcer le modèle à utiliser CUDA
+# Charger le pipeline
 pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+if pipeline is None:
+    raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS.")
+
+# Déplacer vers le device
 pipeline = pipeline.to(device)
-pipeline.device = device
+
+# Vérifier que pipeline a bien l'attribut device avant d'assigner
+if hasattr(pipeline, 'device'):
+    pipeline.device = device
+else:
+    print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
@@ -85,22 +94,20 @@ def image_to_3d(
     os.makedirs(user_dir, exist_ok=True)
 
     with torch.no_grad():
-        # ✅ Force ici aussi le modèle à tourner sur CUDA
-        with torch.cuda.device(device) if device == "cuda" else torch.device("cpu"):
-            outputs = pipeline.run(
-                image,
-                seed=seed,
-                formats=["gaussian", "mesh"],
-                preprocess_image=False,
-                sparse_structure_sampler_params={
-                    "steps": ss_sampling_steps,
-                    "cfg_strength": ss_guidance_strength,
-                },
-                slat_sampler_params={
-                    "steps": slat_sampling_steps,
-                    "cfg_strength": slat_guidance_strength,
-                },
-            )
+        outputs = pipeline.run(
+            image,
+            seed=seed,
+            formats=["gaussian", "mesh"],
+            preprocess_image=False,
+            sparse_structure_sampler_params={
+                "steps": ss_sampling_steps,
+                "cfg_strength": ss_guidance_strength,
+            },
+            slat_sampler_params={
+                "steps": slat_sampling_steps,
+                "cfg_strength": slat_guidance_strength,
+            },
+        )
 
     glb_path = os.path.join(user_dir, 'output.glb')
     glb = postprocessing_utils.to_glb(
