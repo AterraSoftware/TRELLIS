@@ -12,7 +12,13 @@ from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import postprocessing_utils
 
 # --- Pipeline init ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"🔹 Initialisation du pipeline sur le device: {device}")
+
+# ✅ Correction ici : forcer le modèle à utiliser CUDA
 pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+pipeline = pipeline.to(device)
+pipeline.device = device
 
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
@@ -79,20 +85,22 @@ def image_to_3d(
     os.makedirs(user_dir, exist_ok=True)
 
     with torch.no_grad():
-        outputs = pipeline.run(
-            image,
-            seed=seed,
-            formats=["gaussian", "mesh"],
-            preprocess_image=False,
-            sparse_structure_sampler_params={
-                "steps": ss_sampling_steps,
-                "cfg_strength": ss_guidance_strength,
-            },
-            slat_sampler_params={
-                "steps": slat_sampling_steps,
-                "cfg_strength": slat_guidance_strength,
-            },
-        )
+        # ✅ Force ici aussi le modèle à tourner sur CUDA
+        with torch.cuda.device(device) if device == "cuda" else torch.device("cpu"):
+            outputs = pipeline.run(
+                image,
+                seed=seed,
+                formats=["gaussian", "mesh"],
+                preprocess_image=False,
+                sparse_structure_sampler_params={
+                    "steps": ss_sampling_steps,
+                    "cfg_strength": ss_guidance_strength,
+                },
+                slat_sampler_params={
+                    "steps": slat_sampling_steps,
+                    "cfg_strength": slat_guidance_strength,
+                },
+            )
 
     glb_path = os.path.join(user_dir, 'output.glb')
     glb = postprocessing_utils.to_glb(
