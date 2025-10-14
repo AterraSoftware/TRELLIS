@@ -12,8 +12,7 @@ from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import postprocessing_utils
 
 # --- Pipeline init ---
-pipeline = TrellisImageTo3DPipeline.from_pretrained(
-    "trellis-image-to-3d",
+pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
 )
 
 # --- Constantes ---
