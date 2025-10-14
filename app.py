@@ -11,24 +11,6 @@ from trellis.pipelines import TrellisImageTo3DPipeline
 from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import postprocessing_utils
 
-# --- Pipeline init ---
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"🔹 Initialisation du pipeline sur le device: {device}")
-
-# Charger le pipeline
-pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
-if pipeline is None:
-    raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS.")
-
-# Déplacer vers le device
-pipeline = pipeline.to(device)
-
-# Vérifier que pipeline a bien l'attribut device avant d'assigner
-if hasattr(pipeline, 'device'):
-    pipeline.device = device
-else:
-    print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
-
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
@@ -40,9 +22,41 @@ app = FastAPI()
 def create_tmp_dir():
     os.makedirs(TMP_DIR, exist_ok=True)
 
+# --- Pipeline global ---
+pipeline = None  # chargé plus tard via preload_model()
+
+
+def preload_model():
+    """Charge le modèle TRELLIS sur le bon device (GPU si dispo)."""
+    global pipeline
+    if pipeline is not None:
+        print("✅ Modèle déjà chargé, skip preload.")
+        return
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"🔹 Initialisation du pipeline sur le device: {device}")
+
+    pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+    if pipeline is None:
+        raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS.")
+
+    pipeline = pipeline.to(device)
+
+    # Vérifier que pipeline a bien l'attribut device avant d'assigner
+    if hasattr(pipeline, 'device'):
+        pipeline.device = device
+    else:
+        print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
+
+    print(f"✅ Modèle chargé sur {device.upper()}")
+
+
 # --- Fonctions ---
 def preprocess_image(image: Image.Image) -> Image.Image:
+    if pipeline is None:
+        preload_model()
     return pipeline.preprocess_image(image)
+
 
 def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
     return {
@@ -59,6 +73,7 @@ def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
             'faces': mesh.faces.cpu().numpy(),
         },
     }
+
 
 def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
     gs = Gaussian(
@@ -82,6 +97,7 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 
     return gs, mesh
 
+
 def image_to_3d(
     image: Image.Image,
     seed: int = 42,
@@ -90,6 +106,11 @@ def image_to_3d(
     slat_guidance_strength: float = 1.0,
     slat_sampling_steps: int = 20,
 ) -> str:
+    global pipeline
+    if pipeline is None:
+        print("⚙️ Pipeline non chargé, exécution de preload_model()…")
+        preload_model()
+
     user_dir = TMP_DIR
     os.makedirs(user_dir, exist_ok=True)
 
@@ -120,6 +141,7 @@ def image_to_3d(
     glb.export(glb_path)
     torch.cuda.empty_cache()
     return glb_path
+
 
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
