@@ -15,13 +15,6 @@ from trellis.utils import postprocessing_utils
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
-# --- FastAPI app ---
-app = FastAPI()
-
-@app.on_event("startup")
-def create_tmp_dir():
-    os.makedirs(TMP_DIR, exist_ok=True)
-
 # --- Pipeline global ---
 pipeline = None  # chargé plus tard via preload_model()
 
@@ -49,6 +42,18 @@ def preload_model():
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
     print(f"✅ Modèle chargé sur {device.upper()}")
+
+# --- FastAPI app ---
+app = FastAPI()
+
+
+@app.on_event("startup")
+def on_startup():
+    """Création du dossier tmp et préchargement du modèle au démarrage FastAPI."""
+    os.makedirs(TMP_DIR, exist_ok=True)
+    print("🔹 Démarrage FastAPI : création du dossier tmp et préchargement du modèle...")
+    preload_model()
+    print("✅ Modèle TRELLIS prêt à l'utilisation.")
 
 
 # --- Fonctions ---
