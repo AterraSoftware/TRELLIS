@@ -13,7 +13,6 @@ from trellis.utils import postprocessing_utils
 
 # --- Pipeline init ---
 pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
-)
 
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
