@@ -42,11 +42,7 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
     """Retourne le pipeline global, le charge si nécessaire."""
     global GLOBAL_PIPELINE
     if GLOBAL_PIPELINE is None:
-        try:
-            GLOBAL_PIPELINE = preload_model()
-        except Exception as e:
-            print(f"⚠️ Erreur lors du chargement du pipeline global : {e}")
-            GLOBAL_PIPELINE = None
+        GLOBAL_PIPELINE = preload_model()
     return GLOBAL_PIPELINE
 
 # --- FastAPI app ---
@@ -121,8 +117,6 @@ def image_to_3d(
     if pipeline is None:
         print("⚠️ Pipeline reçu est None — rechargement depuis get_pipeline()")
         pipeline = get_pipeline()
-        if pipeline is None:
-            raise RuntimeError("❌ Impossible de charger le pipeline TRELLIS.")
 
     os.makedirs(TMP_DIR, exist_ok=True)
 
