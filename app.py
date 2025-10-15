@@ -121,12 +121,9 @@ def image_to_3d(
 ) -> str:
     """Génère un fichier GLB à partir d'une image en utilisant le pipeline fourni."""
 
+    # ✅ Utiliser le pipeline fourni, ne pas relancer get_pipeline si non-None
     if pipeline is None:
-        print("⚠️ Pipeline reçu est None — rechargement depuis get_pipeline()")
-        pipeline = get_pipeline()
-    
-    if pipeline is None:
-        raise RuntimeError("❌ Impossible de récupérer le pipeline. Abort.")
+        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d. Abort.")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
 
