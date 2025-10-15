@@ -42,6 +42,7 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
     """Retourne le pipeline global, le charge si nécessaire."""
     global GLOBAL_PIPELINE
     if GLOBAL_PIPELINE is None:
+        print("🔹 Pipeline non chargé — initialisation maintenant...")
         GLOBAL_PIPELINE = preload_model()
     return GLOBAL_PIPELINE
 
@@ -53,10 +54,15 @@ app = FastAPI()
 def on_startup():
     """Création du dossier tmp et préchargement du modèle au démarrage FastAPI."""
     os.makedirs(TMP_DIR, exist_ok=True)
-    print("🔹 Démarrage FastAPI : création du dossier tmp et préchargement du modèle...")
-    get_pipeline()
-    print("✅ Modèle TRELLIS prêt à l'utilisation.")
-
+    print("🔹 Démarrage FastAPI : création du dossier tmp)
+    
+    # Préchargement lazy-safe après allocation GPU
+    try:
+        get_pipeline()
+        print("✅ Modèle TRELLIS prêt à l'utilisation.")
+    except Exception as e:
+        print(f"⚠️ Échec du préchargement du pipeline : {e}")
+        print("Le pipeline sera chargé à la première requête.")
 
 # --- Fonctions utilitaires ---
 def preprocess_image(pipeline: TrellisImageTo3DPipeline, image: Image.Image) -> Image.Image:
