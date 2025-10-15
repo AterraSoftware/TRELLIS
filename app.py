@@ -15,9 +15,17 @@ from trellis.utils import postprocessing_utils
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
+# --- Pipeline global (corrigé) ---
+_pipeline = None  # Doit être déclaré avant preload_model()
+
 # --- Pipeline loader ---
 def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
+    global _pipeline
+    if _pipeline is not None:
+        print("✅ Modèle déjà chargé, skip preload.")
+        return _pipeline
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device}")
 
@@ -33,6 +41,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
     else:
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
+    _pipeline = pipeline  # assignation correcte
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()}")
     return _pipeline
 
