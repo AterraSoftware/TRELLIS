@@ -16,6 +16,8 @@ MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
 # --- Pipeline loader ---
+GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
+
 def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     
@@ -28,14 +30,20 @@ def preload_model() -> TrellisImageTo3DPipeline:
 
     pipeline = pipeline.to(device)
 
-    # Vérifier que pipeline a bien l'attribut device avant d'assigner
     if hasattr(pipeline, 'device'):
         pipeline.device = device
     else:
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()}")
-    return pipeline   # ✅ CORRECTION ICI
+    return pipeline
+
+def get_pipeline() -> TrellisImageTo3DPipeline:
+    """Retourne le pipeline global, le charge si nécessaire."""
+    global GLOBAL_PIPELINE
+    if GLOBAL_PIPELINE is None:
+        GLOBAL_PIPELINE = preload_model()
+    return GLOBAL_PIPELINE
 
 # --- FastAPI app ---
 app = FastAPI()
@@ -46,7 +54,7 @@ def on_startup():
     """Création du dossier tmp et préchargement du modèle au démarrage FastAPI."""
     os.makedirs(TMP_DIR, exist_ok=True)
     print("🔹 Démarrage FastAPI : création du dossier tmp et préchargement du modèle...")
-    preload_model()
+    get_pipeline()
     print("✅ Modèle TRELLIS prêt à l'utilisation.")
 
 
@@ -107,8 +115,8 @@ def image_to_3d(
     """Génère un fichier GLB à partir d'une image en utilisant le pipeline fourni."""
 
     if pipeline is None:
-        print("⚠️ Pipeline reçu est None — rechargement depuis preload_model()")
-        pipeline = preload_model()
+        print("⚠️ Pipeline reçu est None — rechargement depuis get_pipeline()")
+        pipeline = get_pipeline()
 
     os.makedirs(TMP_DIR, exist_ok=True)
 
@@ -143,6 +151,6 @@ def image_to_3d(
 # --- Endpoint FastAPI ---
 async def to_3d(file: UploadFile = File(...)):
     image = Image.open(file.file).convert("RGBA")
-    pipeline = preload_model()
+    pipeline = get_pipeline()  # ✅ Utilise le pipeline global
     glb_path = image_to_3d(pipeline, image)
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
