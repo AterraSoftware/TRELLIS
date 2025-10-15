@@ -35,7 +35,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()}")
-    return _pipeline   # ✅ CORRECTION ICI
+    return pipeline   # ✅ CORRECTION ICI
 
 # --- FastAPI app ---
 app = FastAPI()
