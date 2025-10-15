@@ -54,7 +54,7 @@ app = FastAPI()
 def on_startup():
     """Création du dossier tmp et préchargement du modèle au démarrage FastAPI."""
     os.makedirs(TMP_DIR, exist_ok=True)
-    print("🔹 Démarrage FastAPI : création du dossier tmp)
+    print("🔹 Démarrage FastAPI : création du dossier tmp")
     
     # Préchargement lazy-safe après allocation GPU
     try:
