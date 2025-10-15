@@ -37,7 +37,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
     else:
         print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
 
-    print(f"✅ Modèle TRELLIS chargé sur {device.upper()}")
+    print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
     return pipeline
 
 def get_pipeline() -> TrellisImageTo3DPipeline:
@@ -49,6 +49,9 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
             if GLOBAL_PIPELINE is None:
                 print("🔹 Pipeline non chargé — initialisation maintenant...")
                 GLOBAL_PIPELINE = preload_model()
+                print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
+    else:
+        print(f"🔹 Pipeline global déjà chargé (id={id(GLOBAL_PIPELINE)})")
     return GLOBAL_PIPELINE
 
 # --- FastAPI app ---
@@ -121,10 +124,16 @@ def image_to_3d(
     if pipeline is None:
         print("⚠️ Pipeline reçu est None — rechargement depuis get_pipeline()")
         pipeline = get_pipeline()
+    
+    if pipeline is None:
+        raise RuntimeError("❌ Impossible de récupérer le pipeline. Abort.")
+
+    print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
 
     os.makedirs(TMP_DIR, exist_ok=True)
 
     with torch.no_grad():
+        print("🔹 Lancement de pipeline.run()...")
         outputs = pipeline.run(
             image,
             seed=seed,
@@ -139,8 +148,11 @@ def image_to_3d(
                 "cfg_strength": slat_guidance_strength,
             },
         )
+        if outputs is None:
+            raise RuntimeError("❌ pipeline.run() a retourné None")
 
     glb_path = os.path.join(TMP_DIR, 'output.glb')
+    print(f"🔹 Conversion outputs en GLB : {glb_path}")
     glb = postprocessing_utils.to_glb(
         outputs['gaussian'][0],
         outputs['mesh'][0],
@@ -150,11 +162,14 @@ def image_to_3d(
     )
     glb.export(glb_path)
     torch.cuda.empty_cache()
+    print(f"✅ Génération 3D terminée : {glb_path}")
     return glb_path
 
 # --- Endpoint FastAPI (exposé si tu veux appeler localement) ---
 async def to_3d(file: UploadFile = File(...)):
     image = Image.open(file.file).convert("RGBA")
+    print(f"🔹 Requête reçue : {file.filename}")
     pipeline = get_pipeline()  # ✅ Utilise le pipeline global
+    print(f"🔹 Pipeline récupéré dans endpoint (id={id(pipeline)})")
     glb_path = image_to_3d(pipeline, image)
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
