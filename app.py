@@ -24,7 +24,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"🔹 Initialisation du pipeline sur le device: {device}" (pid={os.getpid()})")
+    print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
 
     pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
     if pipeline is None:
