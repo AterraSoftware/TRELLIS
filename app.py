@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import threading
 from typing import Tuple
 from PIL import Image
 from easydict import EasyDict as edict
@@ -17,12 +18,13 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
 # --- Pipeline loader ---
 GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
+_PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
 
 def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"🔹 Initialisation du pipeline sur le device: {device}")
+    print(f"🔹 Initialisation du pipeline sur le device: {device}" (pid={os.getpid()})")
 
     pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
     if pipeline is None:
@@ -39,11 +41,14 @@ def preload_model() -> TrellisImageTo3DPipeline:
     return pipeline
 
 def get_pipeline() -> TrellisImageTo3DPipeline:
-    """Retourne le pipeline global, le charge si nécessaire."""
+    """Retourne le pipeline global, le charge si nécessaire (thread-safe)."""
     global GLOBAL_PIPELINE
     if GLOBAL_PIPELINE is None:
-        print("🔹 Pipeline non chargé — initialisation maintenant...")
-        GLOBAL_PIPELINE = preload_model()
+        with _PIPELINE_LOCK:
+            # double-check après acquisition du lock
+            if GLOBAL_PIPELINE is None:
+                print("🔹 Pipeline non chargé — initialisation maintenant...")
+                GLOBAL_PIPELINE = preload_model()
     return GLOBAL_PIPELINE
 
 # --- FastAPI app ---
@@ -52,16 +57,16 @@ app = FastAPI()
 
 @app.on_event("startup")
 def on_startup():
-    """Création du dossier tmp et préchargement du modèle au démarrage FastAPI."""
+    """Création du dossier tmp et tentative préchargement du modèle au démarrage."""
     os.makedirs(TMP_DIR, exist_ok=True)
     print("🔹 Démarrage FastAPI : création du dossier tmp")
-    
-    # Préchargement lazy-safe après allocation GPU
     try:
+        # essaie de précharger (si GPU dispo dans ce process)
         get_pipeline()
         print("✅ Modèle TRELLIS prêt à l'utilisation.")
     except Exception as e:
-        print(f"⚠️ Échec du préchargement du pipeline : {e}")
+        # On log l'erreur ; le pipeline sera chargé à la première requête via get_pipeline()
+        print(f"⚠️ Échec du préchargement du pipeline au startup : {e}")
         print("Le pipeline sera chargé à la première requête.")
 
 # --- Fonctions utilitaires ---
@@ -154,7 +159,7 @@ def image_to_3d(
     torch.cuda.empty_cache()
     return glb_path
 
-# --- Endpoint FastAPI ---
+# --- Endpoint FastAPI (exposé si tu veux appeler localement) ---
 async def to_3d(file: UploadFile = File(...)):
     image = Image.open(file.file).convert("RGBA")
     pipeline = get_pipeline()  # ✅ Utilise le pipeline global
