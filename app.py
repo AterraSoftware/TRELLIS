@@ -57,17 +57,10 @@ app = FastAPI()
 
 @app.on_event("startup")
 def on_startup():
-    """Création du dossier tmp et tentative préchargement du modèle au démarrage."""
+    """Création du dossier tmp uniquement. Ne pas précharger le pipeline ici."""
     os.makedirs(TMP_DIR, exist_ok=True)
     print("🔹 Démarrage FastAPI : création du dossier tmp")
-    try:
-        # essaie de précharger (si GPU dispo dans ce process)
-        get_pipeline()
-        print("✅ Modèle TRELLIS prêt à l'utilisation.")
-    except Exception as e:
-        # On log l'erreur ; le pipeline sera chargé à la première requête via get_pipeline()
-        print(f"⚠️ Échec du préchargement du pipeline au startup : {e}")
-        print("Le pipeline sera chargé à la première requête.")
+    print("🔹 Pipeline TRELLIS sera chargé à la première requête.")
 
 # --- Fonctions utilitaires ---
 def preprocess_image(pipeline: TrellisImageTo3DPipeline, image: Image.Image) -> Image.Image:
