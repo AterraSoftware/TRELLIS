@@ -20,15 +20,19 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
 _PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
 
+
 def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
-    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
 
-    pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+    try:
+        pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+    except Exception as e:
+        raise RuntimeError(f"❌ Erreur pendant le chargement du modèle TRELLIS : {e}")
+
     if pipeline is None:
-        raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS.")
+        raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS (retour None).")
 
     pipeline = pipeline.to(device)
 
@@ -40,6 +44,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
     return pipeline
 
+
 def get_pipeline() -> TrellisImageTo3DPipeline:
     """Retourne le pipeline global, le charge si nécessaire (thread-safe)."""
     global GLOBAL_PIPELINE
@@ -48,11 +53,23 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
             # double-check après acquisition du lock
             if GLOBAL_PIPELINE is None:
                 print("🔹 Pipeline non chargé — initialisation maintenant...")
-                GLOBAL_PIPELINE = preload_model()
-                print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
+                try:
+                    GLOBAL_PIPELINE = preload_model()
+                    if GLOBAL_PIPELINE is None:
+                        raise RuntimeError("❌ preload_model() a retourné None")
+                    print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
+                except Exception as e:
+                    print(f"❌ Erreur pendant le chargement du pipeline global : {e}")
+                    GLOBAL_PIPELINE = None
+                    raise
     else:
         print(f"🔹 Pipeline global déjà chargé (id={id(GLOBAL_PIPELINE)})")
+
+    if GLOBAL_PIPELINE is None:
+        raise RuntimeError("❌ get_pipeline() n’a pas pu initialiser le pipeline (toujours None)")
+
     return GLOBAL_PIPELINE
+
 
 # --- FastAPI app ---
 app = FastAPI()
@@ -64,6 +81,7 @@ def on_startup():
     os.makedirs(TMP_DIR, exist_ok=True)
     print("🔹 Démarrage FastAPI : création du dossier tmp")
     print("🔹 Pipeline TRELLIS sera chargé à la première requête.")
+
 
 # --- Fonctions utilitaires ---
 def preprocess_image(pipeline: TrellisImageTo3DPipeline, image: Image.Image) -> Image.Image:
@@ -121,12 +139,13 @@ def image_to_3d(
 ) -> str:
     """Génère un fichier GLB à partir d'une image en utilisant le pipeline fourni."""
 
-    # ✅ Utiliser le pipeline fourni, ne pas relancer get_pipeline si non-None
     if pipeline is None:
-        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d. Abort.")
+        print("⚠️ pipeline fourni est None — tentative de rechargement via get_pipeline()")
+        pipeline = get_pipeline()
+        if pipeline is None:
+            raise RuntimeError("❌ Aucun pipeline disponible pour image_to_3d. Abort.")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
-
     os.makedirs(TMP_DIR, exist_ok=True)
 
     with torch.no_grad():
@@ -161,6 +180,7 @@ def image_to_3d(
     torch.cuda.empty_cache()
     print(f"✅ Génération 3D terminée : {glb_path}")
     return glb_path
+
 
 # --- Endpoint FastAPI (exposé si tu veux appeler localement) ---
 async def to_3d(file: UploadFile = File(...)):
