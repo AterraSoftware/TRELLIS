@@ -25,16 +25,24 @@ def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
-
+    
+    pipeline = None
     try:
+        print("🔹 Tentative de chargement du modèle via from_pretrained('microsoft/TRELLIS-image-large')")
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+        print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
     except Exception as e:
-        raise RuntimeError(f"❌ Erreur pendant le chargement du modèle TRELLIS : {e}")
+        print(f"❌ Exception interne dans from_pretrained: {repr(e)}")
+        pipeline = None
 
     if pipeline is None:
-        raise RuntimeError("❌ Échec du chargement du pipeline TRELLIS (retour None).")
+        print("❌ Échec : TrellisImageTo3DPipeline.from_pretrained() a retourné None — possible dépendance manquante ou cache corrompu")
+        return None
 
-    pipeline = pipeline.to(device)
+    try:
+        pipeline = pipeline.to(device)
+    except Exception as e:
+        print(f"⚠️ Erreur pendant le .to({device}) : {repr(e)}")
 
     if hasattr(pipeline, 'device'):
         pipeline.device = device
