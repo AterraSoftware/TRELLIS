@@ -130,7 +130,7 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 
 
 def image_to_3d(
-    pipeline: TrellisImageTo3DPipeline | None,
+    pipeline: TrellisImageTo3DPipeline,
     image: Image.Image,
     seed: int = 42,
     ss_guidance_strength: float = 1.0,
@@ -138,17 +138,14 @@ def image_to_3d(
     slat_guidance_strength: float = 1.0,
     slat_sampling_steps: int = 20,
 ) -> str:
-    """Génère un fichier GLB à partir d'une image en utilisant le pipeline fourni."""
-
+    """Génère un fichier GLB à partir d'une image."""
     if pipeline is None:
-        print("⚠️ pipeline fourni est None — tentative de rechargement via get_pipeline()")
-        pipeline = get_pipeline()
+        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
     os.makedirs(TMP_DIR, exist_ok=True)
 
     with torch.no_grad():
-        print("🔹 Lancement de pipeline.run()...")
         outputs = pipeline.run(
             image,
             seed=seed,
@@ -166,14 +163,13 @@ def image_to_3d(
         if outputs is None:
             raise RuntimeError("❌ pipeline.run() a retourné None")
 
-    glb_path = os.path.join(TMP_DIR, 'output.glb')
-    print(f"🔹 Conversion outputs en GLB : {glb_path}")
+    glb_path = os.path.join(TMP_DIR, "output.glb")
     glb = postprocessing_utils.to_glb(
-        outputs['gaussian'][0],
-        outputs['mesh'][0],
+        outputs["gaussian"][0],
+        outputs["mesh"][0],
         simplify=0.96,
         texture_size=512,
-        verbose=False
+        verbose=False,
     )
     glb.export(glb_path)
     torch.cuda.empty_cache()
@@ -181,11 +177,31 @@ def image_to_3d(
     return glb_path
 
 
-# --- Endpoint FastAPI (exposé si tu veux appeler localement) ---
+# --- Endpoint FastAPI corrigé ---
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
-    image = Image.open(file.file).convert("RGBA")
-    print(f"🔹 Requête reçue : {file.filename}")
-    pipeline = get_pipeline()  # ✅ Utilise le pipeline global
-    print(f"🔹 Pipeline récupéré dans endpoint (id={id(pipeline)})")
-    glb_path = image_to_3d(pipeline, image)
+    img = Image.open(file.file).convert("RGBA")
+    print(f"🔹 Image reçue, taille: {img.size}, mode: {img.mode}")
+
+    # ✅ Toujours utiliser get_pipeline() pour garantir un pipeline valide
+    try:
+        pipeline = get_pipeline()
+        if pipeline is None:
+            raise RuntimeError("❌ Pipeline non disponible")
+    except Exception as e:
+        print(f"❌ Erreur lors de get_pipeline(): {e}")
+        raise RuntimeError("❌ Impossible de récupérer le pipeline TRELLIS") from e
+
+    print(f"🔹 Pipeline prêt pour génération (id={id(pipeline)})")
+
+    try:
+        glb_path = image_to_3d(pipeline, img, seed=42)
+    except Exception as e:
+        print(f"❌ Erreur pendant image_to_3d: {e}")
+        raise RuntimeError("❌ Échec de la génération 3D") from e
+
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
