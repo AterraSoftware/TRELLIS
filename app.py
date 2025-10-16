@@ -30,7 +30,6 @@ def preload_model() -> TrellisImageTo3DPipeline:
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
         print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
 
-        # Vérifie si from_pretrained a renvoyé une classe au lieu d'une instance
         if isinstance(pipeline, type):
             print("⚠️ from_pretrained() a retourné une CLASSE, instanciation manuelle...")
             pipeline = pipeline()
@@ -44,11 +43,6 @@ def preload_model() -> TrellisImageTo3DPipeline:
             pipeline = pipeline.to(device)
         except Exception as e:
             print(f"⚠️ Erreur pendant pipeline.to({device}): {repr(e)} — continuation")
-
-        if hasattr(pipeline, 'device'):
-            pipeline.device = device
-        else:
-            print("⚠️ pipeline n'a pas d'attribut device — on continue sans le définir explicitement")
 
         print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
         return pipeline
@@ -136,7 +130,7 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 
 
 def image_to_3d(
-    pipeline: TrellisImageTo3DPipeline,
+    pipeline: TrellisImageTo3DPipeline | None,
     image: Image.Image,
     seed: int = 42,
     ss_guidance_strength: float = 1.0,
@@ -149,8 +143,6 @@ def image_to_3d(
     if pipeline is None:
         print("⚠️ pipeline fourni est None — tentative de rechargement via get_pipeline()")
         pipeline = get_pipeline()
-        if pipeline is None:
-            raise RuntimeError("❌ Aucun pipeline disponible pour image_to_3d. Abort.")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
     os.makedirs(TMP_DIR, exist_ok=True)
