@@ -139,12 +139,8 @@ def image_to_3d(
     slat_sampling_steps: int = 20,
 ) -> str:
     """Génère un fichier GLB à partir d'une image."""
-    # ⚡ Si le pipeline est None, tenter de récupérer le pipeline global
     if pipeline is None:
-        print("⚠️ Aucun pipeline fourni, tentative de récupération via get_pipeline()...")
-        pipeline = get_pipeline()
-        if pipeline is None:
-            raise RuntimeError("❌ Aucun pipeline disponible pour image_to_3d")
+        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -181,20 +177,29 @@ def image_to_3d(
     return glb_path
 
 
-# --- Endpoint FastAPI corrigé ---
-from fastapi import APIRouter
+# --- Chargement du pipeline (à faire une seule fois) ---
+def load_pipeline() -> TrellisImageTo3DPipeline:
+    print("🔹 Chargement du pipeline TRELLIS sur CUDA...")
+    pipeline = TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')
+    pipeline.to("cuda")
+    print(f"✅ Pipeline chargé avec succès (id={id(pipeline)})")
+    return pipeline
 
-router = APIRouter()
+# --- Exemple FastAPI ---
+from fastapi import FastAPI, UploadFile
+from PIL import Image
 
-@router.post("/to_3d/")
-async def to_3d(file: UploadFile = File(...)):
+app = FastAPI()
+
+# Charger le pipeline **une seule fois** à l'initialisation de l'app
+pipeline = load_pipeline()
+
+@app.post("/to_3d/")
+async def to_3d(file: UploadFile):
+    # Lire l'image envoyée
     img = Image.open(file.file).convert("RGBA")
     print(f"🔹 Image reçue, taille: {img.size}, mode: {img.mode}")
 
-    # ✅ Récupération sûre du pipeline
-    pipeline = get_pipeline()
-    if pipeline is None:
-        raise RuntimeError("❌ Impossible de récupérer le pipeline TRELLIS")
-
+    # Appel explicite de la fonction de génération 3D
     glb_path = image_to_3d(pipeline, img, seed=42)
-    return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
+    return {"glb_path": glb_path}
