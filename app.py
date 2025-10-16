@@ -20,9 +20,9 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
 _PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
 
-
 def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
+    import torch, os
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
 
@@ -30,6 +30,13 @@ def preload_model() -> TrellisImageTo3DPipeline:
         print("🔹 Tentative de chargement du modèle via from_pretrained('microsoft/TRELLIS-image-large')")
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
         print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
+
+        # 🧠 Si from_pretrained renvoie une classe au lieu d'une instance, on l'instancie
+        if isinstance(pipeline, type):
+            print("⚠️ from_pretrained() a retourné une CLASSE, on l’instancie manuellement...")
+            pipeline = pipeline()  # instanciation explicite
+            print(f"✅ Pipeline instancié manuellement : {type(pipeline)} (id={id(pipeline)})")
+
     except Exception as e:
         print(f"❌ Exception pendant from_pretrained: {repr(e)}")
         raise RuntimeError(f"❌ Échec from_pretrained(): {e}")
@@ -48,6 +55,7 @@ def preload_model() -> TrellisImageTo3DPipeline:
         print("⚠️ pipeline n'a pas d'attribut device — on continue sans le définir explicitement")
 
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
+    return pipeline
 
     # Vérification de sécurité : si jamais pipeline est None, on log explicitement
     if pipeline is None:
