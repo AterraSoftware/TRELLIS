@@ -139,8 +139,12 @@ def image_to_3d(
     slat_sampling_steps: int = 20,
 ) -> str:
     """Génère un fichier GLB à partir d'une image."""
+    # ⚡ Si le pipeline est None, tenter de récupérer le pipeline global
     if pipeline is None:
-        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d")
+        print("⚠️ Aucun pipeline fourni, tentative de récupération via get_pipeline()...")
+        pipeline = get_pipeline()
+        if pipeline is None:
+            raise RuntimeError("❌ Aucun pipeline disponible pour image_to_3d")
 
     print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -187,21 +191,10 @@ async def to_3d(file: UploadFile = File(...)):
     img = Image.open(file.file).convert("RGBA")
     print(f"🔹 Image reçue, taille: {img.size}, mode: {img.mode}")
 
-    # ✅ Toujours utiliser get_pipeline() pour garantir un pipeline valide
-    try:
-        pipeline = get_pipeline()
-        if pipeline is None:
-            raise RuntimeError("❌ Pipeline non disponible")
-    except Exception as e:
-        print(f"❌ Erreur lors de get_pipeline(): {e}")
-        raise RuntimeError("❌ Impossible de récupérer le pipeline TRELLIS") from e
+    # ✅ Récupération sûre du pipeline
+    pipeline = get_pipeline()
+    if pipeline is None:
+        raise RuntimeError("❌ Impossible de récupérer le pipeline TRELLIS")
 
-    print(f"🔹 Pipeline prêt pour génération (id={id(pipeline)})")
-
-    try:
-        glb_path = image_to_3d(pipeline, img, seed=42)
-    except Exception as e:
-        print(f"❌ Erreur pendant image_to_3d: {e}")
-        raise RuntimeError("❌ Échec de la génération 3D") from e
-
+    glb_path = image_to_3d(pipeline, img, seed=42)
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
