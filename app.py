@@ -20,11 +20,8 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
 _PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
 
-def preload_model():
+def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
-    import torch, os
-    from trellis.pipelines.trellis_image_to_3d import TrellisImageTo3DPipeline  # ✅ import explicite
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
 
@@ -33,38 +30,32 @@ def preload_model():
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
         print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
 
-        # 🧠 Vérifie si from_pretrained a renvoyé une classe plutôt qu'une instance
+        # Vérifie si from_pretrained a renvoyé une classe au lieu d'une instance
         if isinstance(pipeline, type):
-            print("⚠️ from_pretrained() a retourné une CLASSE, on l’instancie manuellement...")
-            pipeline = pipeline()  # ✅ on crée l’instance ici
+            print("⚠️ from_pretrained() a retourné une CLASSE, instanciation manuelle...")
+            pipeline = pipeline()
             print(f"✅ Pipeline instancié manuellement : {pipeline} (id={id(pipeline)})")
 
+        if pipeline is None:
+            raise RuntimeError("❌ TrellisImageTo3DPipeline.from_pretrained() a retourné None")
+
+        # Assigne le device
+        try:
+            pipeline = pipeline.to(device)
+        except Exception as e:
+            print(f"⚠️ Erreur pendant pipeline.to({device}): {repr(e)} — continuation")
+
+        if hasattr(pipeline, 'device'):
+            pipeline.device = device
+        else:
+            print("⚠️ pipeline n'a pas d'attribut device — on continue sans le définir explicitement")
+
+        print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
+        return pipeline
+
     except Exception as e:
-        print(f"❌ Exception pendant from_pretrained: {repr(e)}")
+        print(f"❌ Exception pendant preload_model: {repr(e)}")
         raise RuntimeError(f"❌ Échec du chargement du modèle TRELLIS : {e}")
-
-    if pipeline is None:
-        raise RuntimeError("❌ TrellisImageTo3DPipeline.from_pretrained() a retourné None")
-
-    try:
-        pipeline = pipeline.to(device)
-    except Exception as e:
-        print(f"⚠️ Erreur pendant pipeline.to({device}): {repr(e)} — tentative de continuer quand même")
-
-    if hasattr(pipeline, 'device'):
-        pipeline.device = device
-    else:
-        print("⚠️ pipeline n'a pas d'attribut device — on continue sans le définir explicitement")
-
-    print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
-    return pipeline
-
-    # Vérification de sécurité : si jamais pipeline est None, on log explicitement
-    if pipeline is None:
-        print("❌ ERREUR: pipeline s'est perdu avant le return (impossible normalement)")
-        raise RuntimeError("❌ preload_model() a retourné None (pipeline perdu avant le return)")
-
-    return pipeline
 
 
 def get_pipeline() -> TrellisImageTo3DPipeline:
@@ -72,23 +63,17 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
     global GLOBAL_PIPELINE
     if GLOBAL_PIPELINE is None:
         with _PIPELINE_LOCK:
-            # double-check après acquisition du lock
             if GLOBAL_PIPELINE is None:
                 print("🔹 Pipeline non chargé — initialisation maintenant...")
                 try:
                     GLOBAL_PIPELINE = preload_model()
-                    if GLOBAL_PIPELINE is None:
-                        raise RuntimeError("❌ preload_model() a retourné None")
                     print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
                 except Exception as e:
                     print(f"❌ Erreur pendant le chargement du pipeline global : {e}")
                     GLOBAL_PIPELINE = None
-                    raise
+                    raise RuntimeError("❌ Pipeline non disponible") from e
     else:
         print(f"🔹 Pipeline global déjà chargé (id={id(GLOBAL_PIPELINE)})")
-
-    if GLOBAL_PIPELINE is None:
-        raise RuntimeError("❌ get_pipeline() n’a pas pu initialiser le pipeline (toujours None)")
 
     return GLOBAL_PIPELINE
 
