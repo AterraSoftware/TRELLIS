@@ -20,26 +20,28 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
 _PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
 
-def preload_model() -> TrellisImageTo3DPipeline:
+def preload_model():
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     import torch, os
+    from trellis.pipelines.trellis_image_to_3d import TrellisImageTo3DPipeline  # ✅ import explicite
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
 
     try:
-        print("🔹 Tentative de chargement du modèle via from_pretrained('microsoft/TRELLIS-image-large')")
+        print("🔹 Tentative de chargement du modèle via TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')")
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
         print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
 
-        # 🧠 Si from_pretrained renvoie une classe au lieu d'une instance, on l'instancie
+        # 🧠 Vérifie si from_pretrained a renvoyé une classe plutôt qu'une instance
         if isinstance(pipeline, type):
             print("⚠️ from_pretrained() a retourné une CLASSE, on l’instancie manuellement...")
-            pipeline = pipeline()  # instanciation explicite
-            print(f"✅ Pipeline instancié manuellement : {type(pipeline)} (id={id(pipeline)})")
+            pipeline = pipeline()  # ✅ on crée l’instance ici
+            print(f"✅ Pipeline instancié manuellement : {pipeline} (id={id(pipeline)})")
 
     except Exception as e:
         print(f"❌ Exception pendant from_pretrained: {repr(e)}")
-        raise RuntimeError(f"❌ Échec from_pretrained(): {e}")
+        raise RuntimeError(f"❌ Échec du chargement du modèle TRELLIS : {e}")
 
     if pipeline is None:
         raise RuntimeError("❌ TrellisImageTo3DPipeline.from_pretrained() a retourné None")
