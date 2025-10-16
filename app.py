@@ -16,41 +16,9 @@ from trellis.utils import postprocessing_utils
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
-# --- Pipeline loader ---
-GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None  # ✅ Singleton global
-_PIPELINE_LOCK = threading.Lock()  # protège la création du pipeline
-
-def preload_model() -> TrellisImageTo3DPipeline:
-    """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
-
-    try:
-        print("🔹 Tentative de chargement du modèle via TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')")
-        pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
-        print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
-
-        if isinstance(pipeline, type):
-            print("⚠️ from_pretrained() a retourné une CLASSE, instanciation manuelle...")
-            pipeline = pipeline()
-            print(f"✅ Pipeline instancié manuellement : {pipeline} (id={id(pipeline)})")
-
-        if pipeline is None:
-            raise RuntimeError("❌ TrellisImageTo3DPipeline.from_pretrained() a retourné None")
-
-        # Assigne le device
-        try:
-            pipeline = pipeline.to(device)
-        except Exception as e:
-            print(f"⚠️ Erreur pendant pipeline.to({device}): {repr(e)} — continuation")
-
-        print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
-        return pipeline
-
-    except Exception as e:
-        print(f"❌ Exception pendant preload_model: {repr(e)}")
-        raise RuntimeError(f"❌ Échec du chargement du modèle TRELLIS : {e}")
-
+# --- Pipeline loader (lazy, thread-safe) ---
+GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None
+_PIPELINE_LOCK = threading.Lock()
 
 def get_pipeline() -> TrellisImageTo3DPipeline:
     """Retourne le pipeline global, le charge si nécessaire (thread-safe)."""
@@ -59,35 +27,32 @@ def get_pipeline() -> TrellisImageTo3DPipeline:
         with _PIPELINE_LOCK:
             if GLOBAL_PIPELINE is None:
                 print("🔹 Pipeline non chargé — initialisation maintenant...")
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
                 try:
-                    GLOBAL_PIPELINE = preload_model()
+                    pipeline = TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')
+                    pipeline.to(device)
+                    GLOBAL_PIPELINE = pipeline
                     print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
                 except Exception as e:
                     print(f"❌ Erreur pendant le chargement du pipeline global : {e}")
                     GLOBAL_PIPELINE = None
                     raise RuntimeError("❌ Pipeline non disponible") from e
-    else:
-        print(f"🔹 Pipeline global déjà chargé (id={id(GLOBAL_PIPELINE)})")
-
     return GLOBAL_PIPELINE
-
 
 # --- FastAPI app ---
 app = FastAPI()
 
-
 @app.on_event("startup")
 def on_startup():
-    """Création du dossier tmp uniquement. Ne pas précharger le pipeline ici."""
+    """Création du dossier tmp uniquement. Pipeline lazy load."""
     os.makedirs(TMP_DIR, exist_ok=True)
     print("🔹 Démarrage FastAPI : création du dossier tmp")
     print("🔹 Pipeline TRELLIS sera chargé à la première requête.")
 
-
 # --- Fonctions utilitaires ---
 def preprocess_image(pipeline: TrellisImageTo3DPipeline, image: Image.Image) -> Image.Image:
     return pipeline.preprocess_image(image)
-
 
 def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
     return {
@@ -104,7 +69,6 @@ def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
             'faces': mesh.faces.cpu().numpy(),
         },
     }
-
 
 def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
     gs = Gaussian(
@@ -127,7 +91,6 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
     )
 
     return gs, mesh
-
 
 def image_to_3d(
     pipeline: TrellisImageTo3DPipeline,
@@ -176,26 +139,12 @@ def image_to_3d(
     print(f"✅ Génération 3D terminée : {glb_path}")
     return glb_path
 
-
-# --- Chargement du pipeline (à faire une seule fois) ---
-def load_pipeline() -> TrellisImageTo3DPipeline:
-    print("🔹 Chargement du pipeline TRELLIS sur CUDA...")
-    pipeline = TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')
-    pipeline.to("cuda")
-    print(f"✅ Pipeline chargé avec succès (id={id(pipeline)})")
-    return pipeline
-
-# --- Exemple FastAPI ---
-from fastapi import FastAPI, UploadFile
-from PIL import Image
-
-app = FastAPI()
-
-# Charger le pipeline **une seule fois** à l'initialisation de l'app
-pipeline = load_pipeline()
-
+# --- FastAPI endpoint ---
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile):
+    # Lazy load du pipeline dans le worker
+    pipeline = get_pipeline()
+
     # Lire l'image envoyée
     img = Image.open(file.file).convert("RGBA")
     print(f"🔹 Image reçue, taille: {img.size}, mode: {img.mode}")
