@@ -25,31 +25,35 @@ def preload_model() -> TrellisImageTo3DPipeline:
     """Charge le modèle TRELLIS sur GPU si disponible et retourne le pipeline."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
-    
-    pipeline = None
+
     try:
         print("🔹 Tentative de chargement du modèle via from_pretrained('microsoft/TRELLIS-image-large')")
         pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
         print(f"🔹 Résultat du chargement from_pretrained: {type(pipeline)}")
     except Exception as e:
-        print(f"❌ Exception interne dans from_pretrained: {repr(e)}")
-        pipeline = None
+        print(f"❌ Exception pendant from_pretrained: {repr(e)}")
+        raise RuntimeError(f"❌ Échec from_pretrained(): {e}")
 
     if pipeline is None:
-        print("❌ Échec : TrellisImageTo3DPipeline.from_pretrained() a retourné None — possible dépendance manquante ou cache corrompu")
-        return None
+        raise RuntimeError("❌ TrellisImageTo3DPipeline.from_pretrained() a retourné None")
 
     try:
         pipeline = pipeline.to(device)
     except Exception as e:
-        print(f"⚠️ Erreur pendant le .to({device}) : {repr(e)}")
+        print(f"⚠️ Erreur pendant pipeline.to({device}): {repr(e)} — tentative de continuer quand même")
 
     if hasattr(pipeline, 'device'):
         pipeline.device = device
     else:
-        print("⚠️ pipeline n'a pas d'attribut device, utilisation directe du device lors de l'appel")
+        print("⚠️ pipeline n'a pas d'attribut device — on continue sans le définir explicitement")
 
     print(f"✅ Modèle TRELLIS chargé sur {device.upper()} (pipeline id={id(pipeline)})")
+
+    # Vérification de sécurité : si jamais pipeline est None, on log explicitement
+    if pipeline is None:
+        print("❌ ERREUR: pipeline s'est perdu avant le return (impossible normalement)")
+        raise RuntimeError("❌ preload_model() a retourné None (pipeline perdu avant le return)")
+
     return pipeline
 
 
