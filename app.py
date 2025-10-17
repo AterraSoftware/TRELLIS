@@ -1,7 +1,6 @@
 import os
 import torch
 import numpy as np
-import threading
 from typing import Tuple
 from PIL import Image
 from easydict import EasyDict as edict
@@ -12,46 +11,22 @@ from trellis.pipelines import TrellisImageTo3DPipeline
 from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import postprocessing_utils
 
+# --- Pipeline init ---
+pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+
 # --- Constantes ---
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
-
-# --- Pipeline loader (lazy, thread-safe) ---
-GLOBAL_PIPELINE: TrellisImageTo3DPipeline | None = None
-_PIPELINE_LOCK = threading.Lock()
-
-def get_pipeline() -> TrellisImageTo3DPipeline:
-    """Retourne le pipeline global, le charge si nécessaire (thread-safe)."""
-    global GLOBAL_PIPELINE
-    if GLOBAL_PIPELINE is None:
-        with _PIPELINE_LOCK:
-            if GLOBAL_PIPELINE is None:
-                print("🔹 Pipeline non chargé — initialisation maintenant...")
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                print(f"🔹 Initialisation du pipeline sur le device: {device} (pid={os.getpid()})")
-                try:
-                    pipeline = TrellisImageTo3DPipeline.from_pretrained('microsoft/TRELLIS-image-large')
-                    pipeline.to(device)
-                    GLOBAL_PIPELINE = pipeline
-                    print(f"✅ Pipeline global assigné (id={id(GLOBAL_PIPELINE)})")
-                except Exception as e:
-                    print(f"❌ Erreur pendant le chargement du pipeline global : {e}")
-                    GLOBAL_PIPELINE = None
-                    raise RuntimeError("❌ Pipeline non disponible") from e
-    return GLOBAL_PIPELINE
 
 # --- FastAPI app ---
 app = FastAPI()
 
 @app.on_event("startup")
-def on_startup():
-    """Création du dossier tmp uniquement. Pipeline lazy load."""
+def create_tmp_dir():
     os.makedirs(TMP_DIR, exist_ok=True)
-    print("🔹 Démarrage FastAPI : création du dossier tmp")
-    print("🔹 Pipeline TRELLIS sera chargé à la première requête.")
 
-# --- Fonctions utilitaires ---
-def preprocess_image(pipeline: TrellisImageTo3DPipeline, image: Image.Image) -> Image.Image:
+# --- Fonctions ---
+def preprocess_image(image: Image.Image) -> Image.Image:
     return pipeline.preprocess_image(image)
 
 def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
@@ -93,7 +68,6 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
     return gs, mesh
 
 def image_to_3d(
-    pipeline: TrellisImageTo3DPipeline,
     image: Image.Image,
     seed: int = 42,
     ss_guidance_strength: float = 1.0,
@@ -101,12 +75,8 @@ def image_to_3d(
     slat_guidance_strength: float = 1.0,
     slat_sampling_steps: int = 20,
 ) -> str:
-    """Génère un fichier GLB à partir d'une image."""
-    if pipeline is None:
-        raise RuntimeError("❌ Aucun pipeline fourni à image_to_3d")
-
-    print(f"🔹 Pipeline prêt pour génération 3D (id={id(pipeline)})")
-    os.makedirs(TMP_DIR, exist_ok=True)
+    user_dir = TMP_DIR
+    os.makedirs(user_dir, exist_ok=True)
 
     with torch.no_grad():
         outputs = pipeline.run(
@@ -123,32 +93,21 @@ def image_to_3d(
                 "cfg_strength": slat_guidance_strength,
             },
         )
-        if outputs is None:
-            raise RuntimeError("❌ pipeline.run() a retourné None")
 
-    glb_path = os.path.join(TMP_DIR, "output.glb")
+    glb_path = os.path.join(user_dir, 'output.glb')
     glb = postprocessing_utils.to_glb(
-        outputs["gaussian"][0],
-        outputs["mesh"][0],
+        outputs['gaussian'][0],
+        outputs['mesh'][0],
         simplify=0.96,
         texture_size=512,
-        verbose=False,
+        verbose=False
     )
     glb.export(glb_path)
     torch.cuda.empty_cache()
-    print(f"✅ Génération 3D terminée : {glb_path}")
     return glb_path
 
-# --- FastAPI endpoint ---
 @app.post("/to_3d/")
-async def to_3d(file: UploadFile):
-    # Lazy load du pipeline dans le worker
-    pipeline = get_pipeline()
-
-    # Lire l'image envoyée
-    img = Image.open(file.file).convert("RGBA")
-    print(f"🔹 Image reçue, taille: {img.size}, mode: {img.mode}")
-
-    # Appel explicite de la fonction de génération 3D
-    glb_path = image_to_3d(pipeline, img, seed=42)
-    return {"glb_path": glb_path}
+async def to_3d(file: UploadFile = File(...)):
+    image = Image.open(file.file).convert("RGBA")
+    glb_path = image_to_3d(image)
+    return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
