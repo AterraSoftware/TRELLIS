@@ -27,6 +27,7 @@ def create_tmp_dir():
 
 # --- Fonctions ---
 def preprocess_image(image: Image.Image) -> Image.Image:
+    """Prétraitement officiel Trellis (correction couleurs, masque, luminosité)."""
     return pipeline.preprocess_image(image)
 
 def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
@@ -83,7 +84,7 @@ def image_to_3d(
             image,
             seed=seed,
             formats=["gaussian", "mesh"],
-            preprocess_image=False,
+            preprocess_image=False,  # déjà fait avant
             sparse_structure_sampler_params={
                 "steps": ss_sampling_steps,
                 "cfg_strength": ss_guidance_strength,
@@ -108,6 +109,19 @@ def image_to_3d(
 
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
-    image = Image.open(file.file).convert("RGBA")
+    """Reçoit une image, la prétraite et génère le modèle GLB."""
+    image = Image.open(file.file)
+
+    # --- Gestion du mode et correction de luminosité ---
+    if image.mode == "RGBA":
+        # Conserve l'alpha pour éviter l'assombrissement
+        image = image.convert("RGBA")
+    else:
+        image = image.convert("RGB")
+
+    # --- Étape clé : prétraitement officiel Trellis ---
+    image = preprocess_image(image)
+
+    # --- Génération ---
     glb_path = image_to_3d(image)
     return FileResponse(glb_path, media_type="model/gltf-binary", filename="output.glb")
