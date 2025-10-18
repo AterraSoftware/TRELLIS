@@ -67,9 +67,9 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 def image_to_3d(
     image: Image.Image,
     seed: int = 42,
-    ss_guidance_strength: float = 7.5,
-    ss_sampling_steps: int = 13,
-    slat_guidance_strength: float = 3,
+    ss_guidance_strength: float = 7,
+    ss_sampling_steps: int = 20,
+    slat_guidance_strength: float = 2.5,
     slat_sampling_steps: int = 13,
 ) -> str:
     user_dir = TMP_DIR
