@@ -96,7 +96,7 @@ def image_to_3d(
         outputs['gaussian'][0],
         outputs['mesh'][0],
         simplify=0.95,
-        texture_size=1536,
+        texture_size=1024,
         verbose=False
     )
     glb.export(glb_path)
