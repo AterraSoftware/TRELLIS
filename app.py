@@ -26,10 +26,6 @@ def create_tmp_dir():
     os.makedirs(TMP_DIR, exist_ok=True)
 
 # --- Fonctions ---
-def preprocess_image(image: Image.Image) -> Image.Image:
-    """Prétraitement officiel Trellis (correction couleurs, masque, luminosité)."""
-    return pipeline.preprocess_image(image)
-
 def pack_state(gs: Gaussian, mesh: MeshExtractResult) -> dict:
     return {
         'gaussian': {
@@ -71,10 +67,10 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict]:
 def image_to_3d(
     image: Image.Image,
     seed: int = 42,
-    ss_guidance_strength: float = 1.0,
-    ss_sampling_steps: int = 20,
-    slat_guidance_strength: float = 1.0,
-    slat_sampling_steps: int = 20,
+    ss_guidance_strength: float = 7.5,
+    ss_sampling_steps: int = 13,
+    slat_guidance_strength: float = 3,
+    slat_sampling_steps: int = 13,
 ) -> str:
     user_dir = TMP_DIR
     os.makedirs(user_dir, exist_ok=True)
@@ -84,7 +80,7 @@ def image_to_3d(
             image,
             seed=seed,
             formats=["gaussian", "mesh"],
-            preprocess_image=False,  # déjà fait avant
+            preprocess_image=True,  # Laisser la pipeline faire le prétraitement complet
             sparse_structure_sampler_params={
                 "steps": ss_sampling_steps,
                 "cfg_strength": ss_guidance_strength,
@@ -99,8 +95,8 @@ def image_to_3d(
     glb = postprocessing_utils.to_glb(
         outputs['gaussian'][0],
         outputs['mesh'][0],
-        simplify=0.96,
-        texture_size=512,
+        simplify=0.97,
+        texture_size=2048,
         verbose=False
     )
     glb.export(glb_path)
@@ -109,18 +105,15 @@ def image_to_3d(
 
 @app.post("/to_3d/")
 async def to_3d(file: UploadFile = File(...)):
-    """Reçoit une image, la prétraite et génère le modèle GLB."""
+    """Reçoit une image et génère le modèle GLB."""
     image = Image.open(file.file)
 
-    # --- Gestion du mode et correction de luminosité ---
-    if image.mode == "RGBA":
-        # Conserve l'alpha pour éviter l'assombrissement
-        image = image.convert("RGBA")
-    else:
+    # --- Conversion propre en RGB pour éviter que l'alpha assombrisse ---
+    if image.mode not in ["RGB", "RGBA"]:
         image = image.convert("RGB")
-
-    # --- Étape clé : prétraitement officiel Trellis ---
-    image = preprocess_image(image)
+    elif image.mode == "RGBA":
+        # Supprime alpha pour que le pipeline soit cohérent avec l'officiel
+        image = image.convert("RGB")
 
     # --- Génération ---
     glb_path = image_to_3d(image)
