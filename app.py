@@ -70,7 +70,7 @@ def image_to_3d(
     ss_guidance_strength: float = 7,
     ss_sampling_steps: int = 20,
     slat_guidance_strength: float = 2,
-    slat_sampling_steps: int = 20,
+    slat_sampling_steps: int = 12,
 ) -> str:
     user_dir = TMP_DIR
     os.makedirs(user_dir, exist_ok=True)
@@ -95,8 +95,8 @@ def image_to_3d(
     glb = postprocessing_utils.to_glb(
         outputs['gaussian'][0],
         outputs['mesh'][0],
-        simplify=0.95,
-        texture_size=1024,
+        simplify=0.91,
+        texture_size=2048,
         verbose=False
     )
     glb.export(glb_path)
