@@ -95,7 +95,7 @@ def image_to_3d(
     glb = postprocessing_utils.to_glb(
         outputs['gaussian'][0],
         outputs['mesh'][0],
-        simplify=0.98,
+        simplify=0.94,
         texture_size=2048,
         verbose=False
     )
